@@ -33,13 +33,16 @@ jobs:
         echo "ANDROID_NDK_BIN=$ANDROID_NDK_BIN" >> $GITHUB_ENV
         echo "TOOLCHAIN_PREFIX=$ANDROID_NDK_BIN/aarch64-linux-android29-" >> $GITHUB_ENV
 
-    - name: Patch Source for ARM64
+    - name: Patch Source for ARM64 & Clang
       run: |
         # Strip Intel-specific headers that crash the ARM clang compiler
         find . -type f -name "*.[ch]*" -exec sed -i -E 's/#include <(immintrin|nmmintrin|smmintrin|emmintrin|xmmintrin|x86intrin)\.h>//g' {} +
         
-        # If the engine uses the Intel _mm_prefetch unconditionally, map it to the GCC/Clang standard builtin
+        # Map Intel _mm_prefetch to standard builtin
         find . -type f -name "*.[ch]*" -exec sed -i 's/_mm_prefetch/\\__builtin_prefetch/g' {} +
+        
+        # Inject missing <sstream> header into position.cpp for strict Clang compilation
+        sed -i '1i #include <sstream>' ./src/position.cpp
 
     - name: Compile BlackCore natively for Android
       run: |
@@ -52,6 +55,7 @@ jobs:
           TBPROBE="fathom/src/tbprobe.c"
         fi
         
+        # Removed the GCC-specific -Wno-class-memaccess flag
         ${{ env.TOOLCHAIN_PREFIX }}clang++ \
           -O3 \
           -flto \
@@ -59,7 +63,6 @@ jobs:
           -march=armv8-a \
           -pthread \
           -Wall \
-          -Wno-class-memaccess \
           -DNDEBUG \
           -DVERSION=\"v6.0-Android\" \
           $CPP_FILES $TBPROBE \
