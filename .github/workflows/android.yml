@@ -16,6 +16,8 @@ jobs:
     steps:
     - name: Clone Repository
       uses: actions/checkout@v4
+      with:
+        submodules: recursive  # Clones fathom/ and other submodules automatically
 
     - name: Set up Android NDK Environment
       run: |
@@ -35,8 +37,15 @@ jobs:
       run: |
         export PATH=${{ env.ANDROID_NDK_BIN }}:$PATH
         
-        # We invoke the NDK compiler directly, ignoring the x86 Makefile.
-        # Notice we omit any AVX2/BMI2 flags so it uses the standard C++ fallback in Nnue.cpp
+        # Dynamically locate all .cpp files in the repository
+        CPP_FILES=$(find . -name "*.cpp" ! -path "*/fathom/*")
+        
+        # Check if fathom tablebase file exists
+        TBPROBE=""
+        if [ -f "fathom/src/tbprobe.c" ]; then
+          TBPROBE="fathom/src/tbprobe.c"
+        fi
+        
         ${{ env.TOOLCHAIN_PREFIX }}clang++ \
           -O3 \
           -flto \
@@ -47,7 +56,7 @@ jobs:
           -Wno-class-memaccess \
           -DNDEBUG \
           -DVERSION=\"v6.0-Android\" \
-          *.cpp fathom/src/tbprobe.c \
+          $CPP_FILES $TBPROBE \
           -o BlackCore
 
     - name: Upload Binary Artifact
