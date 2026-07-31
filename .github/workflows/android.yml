@@ -17,7 +17,7 @@ jobs:
     - name: Clone Repository
       uses: actions/checkout@v4
       with:
-        submodules: recursive  # Clones fathom/ and other submodules automatically
+        submodules: recursive
 
     - name: Set up Android NDK Environment
       run: |
@@ -33,14 +33,20 @@ jobs:
         echo "ANDROID_NDK_BIN=$ANDROID_NDK_BIN" >> $GITHUB_ENV
         echo "TOOLCHAIN_PREFIX=$ANDROID_NDK_BIN/aarch64-linux-android29-" >> $GITHUB_ENV
 
+    - name: Patch Source for ARM64
+      run: |
+        # Strip Intel-specific headers that crash the ARM clang compiler
+        find . -type f -name "*.[ch]*" -exec sed -i -E 's/#include <(immintrin|nmmintrin|smmintrin|emmintrin|xmmintrin|x86intrin)\.h>//g' {} +
+        
+        # If the engine uses the Intel _mm_prefetch unconditionally, map it to the GCC/Clang standard builtin
+        find . -type f -name "*.[ch]*" -exec sed -i 's/_mm_prefetch/\\__builtin_prefetch/g' {} +
+
     - name: Compile BlackCore natively for Android
       run: |
         export PATH=${{ env.ANDROID_NDK_BIN }}:$PATH
         
-        # Dynamically locate all .cpp files in the repository
         CPP_FILES=$(find . -name "*.cpp" ! -path "*/fathom/*")
         
-        # Check if fathom tablebase file exists
         TBPROBE=""
         if [ -f "fathom/src/tbprobe.c" ]; then
           TBPROBE="fathom/src/tbprobe.c"
